@@ -10,9 +10,10 @@ mkdir -p "${MCP_TAOBAO_USER_DATA_DIR:-/data/profile}"
 
 # 1) 虚拟显示
 Xvfb "$DISP" -screen 0 "$SCREEN" -ac +extension GLX +render -noreset >/tmp/xvfb.log 2>&1 &
-for i in $(seq 1 30); do
-    if xdpyinfo -display "$DISP" >/dev/null 2>&1; then break; fi
-    sleep 0.3
+# 等待 Xvfb 就绪(检测 X11 socket,不依赖 x11-utils)
+for i in $(seq 1 40); do
+    [ -S "/tmp/.X11-unix/X${DISP#:}" ] && break
+    sleep 0.25
 done
 
 # 2) VNC 服务(连接到 Xvfb 的虚拟屏)

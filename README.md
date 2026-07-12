@@ -61,8 +61,8 @@ cp .env.example .env      # 按需改金额上限、站点、VNC 密码
 docker compose up -d
 ```
 
-- 镜像基于 `python:3.11-slim`,内含 **Chromium + Xvfb + x11vnc + noVNC + 中文字体**,
-  因带浏览器与桌面组件,体积较大(约 1.5GB)。
+- 镜像基于 `python:3.11-slim`,内含 **Chromium + Xvfb + x11vnc + noVNC + 精简中文字体(wqy-microhei)**,
+  因带浏览器与桌面组件,体积约 **1.2GB**(已做单层安装 + 清缓存瘦身)。
 - 暴露端口:**8094**(MCP SSE)、**6080**(noVNC 网页,人工付款接管)。
 - 登录态通过卷 `taobao_profile:/data/profile` 持久化,重启不丢登录。
 - 推送 `v*` tag 触发 GitHub Actions:amd64 + arm64 原生构建、推 Harbor、多架构 manifest、GitHub Release。
