@@ -1,0 +1,26 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+.env
+*.tar.gz
+*.zip
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+# 浏览器持久化 profile / 抓取产物
+profile/
+user-data/
+screenshots/
+*.png

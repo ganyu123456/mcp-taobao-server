@@ -1,0 +1,41 @@
+version: "3.8"
+services:
+  mcp-taobao-server:
+    image: ${MCP_IMAGE:-harbor.zkjgy.online/library/mcp-taobao-server:latest}
+    container_name: mcp-taobao-server
+    restart: unless-stopped
+    ports:
+      - "${MCP_PORT:-8094}:8094"
+      - "${MCP_TAOBAO_NOVNC_PORT:-6080}:6080"   # noVNC 网页,人工付款接管
+    environment:
+      - MCP_TRANSPORT=${MCP_TRANSPORT:-sse}
+      - MCP_HOST=0.0.0.0
+      - MCP_PORT=8094
+      - MCP_DEFAULT_PLATFORM=taobao
+      - MCP_TAOBAO_HEADLESS=${MCP_TAOBAO_HEADLESS:-false}
+      - MCP_TAOBAO_SITE=${MCP_TAOBAO_SITE:-h5}
+      - MCP_TAOBAO_TIMEOUT=${MCP_TAOBAO_TIMEOUT:-30}
+      - MCP_TAOBAO_MAX_RESULTS=${MCP_TAOBAO_MAX_RESULTS:-10}
+      - MCP_TAOBAO_MAX_ORDER_AMOUNT=${MCP_TAOBAO_MAX_ORDER_AMOUNT:-200}
+      - MCP_TAOBAO_MAX_QTY=${MCP_TAOBAO_MAX_QTY:-10}
+      - MCP_TAOBAO_SLOWMO=${MCP_TAOBAO_SLOWMO:-0}
+      - MCP_TAOBAO_USER_DATA_DIR=/data/profile
+      - MCP_TAOBAO_SCREEN=${MCP_TAOBAO_SCREEN:-1280x1024x24}
+      - MCP_TAOBAO_NOVNC_PORT=6080
+      - MCP_TAOBAO_VNC_PASSWORD=${MCP_TAOBAO_VNC_PASSWORD:-}
+    volumes:
+      - taobao_profile:/data/profile   # 持久化登录态(cookie),扫码登录一次长期复用
+    shm_size: "1gb"                    # Chromium 需要较大 /dev/shm
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8094/sse')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    labels:
+      - "mcp.server.name=mcp-taobao-server"
+      - "mcp.server.version=${MCP_VERSION:-latest}"
+      - "mcp.server.description=Taobao shopping automation MCP (search/add-to-cart/draft-order, human pays via noVNC)"
+
+volumes:
+  taobao_profile:
