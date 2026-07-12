@@ -11,13 +11,13 @@ services:
       - MCP_TRANSPORT=${MCP_TRANSPORT:-sse}
       - MCP_HOST=0.0.0.0
       - MCP_PORT=8094
-      - MCP_DEFAULT_PLATFORM=taobao
+      - MCP_DEFAULT_PLATFORM=eleme
       - MCP_TAOBAO_HEADLESS=${MCP_TAOBAO_HEADLESS:-false}
-      - MCP_TAOBAO_SITE=${MCP_TAOBAO_SITE:-h5}
+      - MCP_TAOBAO_LAT=${MCP_TAOBAO_LAT:-32.06}
+      - MCP_TAOBAO_LNG=${MCP_TAOBAO_LNG:-118.80}
       - MCP_TAOBAO_TIMEOUT=${MCP_TAOBAO_TIMEOUT:-30}
       - MCP_TAOBAO_MAX_RESULTS=${MCP_TAOBAO_MAX_RESULTS:-10}
-      - MCP_TAOBAO_MAX_ORDER_AMOUNT=${MCP_TAOBAO_MAX_ORDER_AMOUNT:-200}
-      - MCP_TAOBAO_MAX_QTY=${MCP_TAOBAO_MAX_QTY:-10}
+      - MCP_TAOBAO_MAX_ORDER_AMOUNT=${MCP_TAOBAO_MAX_ORDER_AMOUNT:-100}
       - MCP_TAOBAO_SLOWMO=${MCP_TAOBAO_SLOWMO:-0}
       - MCP_TAOBAO_USER_DATA_DIR=/data/profile
       - MCP_TAOBAO_SCREEN=${MCP_TAOBAO_SCREEN:-1280x1024x24}
@@ -35,7 +35,7 @@ services:
     labels:
       - "mcp.server.name=mcp-taobao-server"
       - "mcp.server.version=${MCP_VERSION:-latest}"
-      - "mcp.server.description=Taobao shopping automation MCP (search/add-to-cart/draft-order, human pays via noVNC)"
+      - "mcp.server.description=Taobao Shangou / Ele.me takeout automation MCP (search/add-to-cart/draft-order, human login & pay via noVNC)"
 
 volumes:
   taobao_profile:

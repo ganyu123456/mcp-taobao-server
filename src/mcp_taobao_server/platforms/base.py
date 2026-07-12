@@ -1,9 +1,11 @@
-"""Abstraction layer for Taobao automation backends.
+"""Abstraction layer for 淘宝闪购/饿了么 takeout automation backends.
 
-Follows the project convention: result dataclasses (each with ``to_dict``) +
-an ABC base class + a domain-specific error type. A backend drives a real
-browser (Playwright) rather than a stateless HTTP API, so the base class also
+Convention: result dataclasses (each with ``to_dict``) + an ABC base class +
+a domain error. A backend drives a real browser (Playwright), so the base also
 declares ``start`` / ``close`` lifecycle hooks for the persistent context.
+
+Takeout flow (ele.me H5): 登录(手机+短信+滑块) → 选收货地址 → 搜附近店/菜 →
+加购 → 生成订单(停在支付前,人工付款)。
 """
 
 from abc import ABC, abstractmethod
@@ -11,153 +13,146 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 
-# ---------------------------------------------------------------------------
-# Result dataclasses (flat, JSON-serialisable)
-# ---------------------------------------------------------------------------
-
 @dataclass
 class LoginStatus:
-    """Whether the persistent browser context is logged in to Taobao."""
     logged_in: bool = False
-    nick: str = ""            # account nickname when logged in
+    phone: str = ""
     platform: str = ""
 
     def to_dict(self) -> dict:
-        return {"logged_in": self.logged_in, "nick": self.nick, "platform": self.platform}
+        return {"logged_in": self.logged_in, "phone": self.phone, "platform": self.platform}
 
 
 @dataclass
-class LoginQrcode:
-    """Login QR code to be scanned by the Taobao mobile app."""
-    qrcode_data_uri: str = ""   # data:image/png;base64,... of the QR image
-    tip: str = ""
-    platform: str = ""
-
+class Address:
+    index: int = 0
+    label: str = ""        # 地址主名(如 马家店春华园2栋)
+    detail: str = ""       # 门牌/补充(如 806)
+    contact: str = ""      # 联系人+电话
+    current: bool = False  # 是否当前选中
     def to_dict(self) -> dict:
-        return {"qrcode_data_uri": self.qrcode_data_uri, "tip": self.tip, "platform": self.platform}
+        return {"index": self.index, "label": self.label, "detail": self.detail,
+                "contact": self.contact, "current": self.current}
 
 
 @dataclass
-class Item:
-    """A single search-result item."""
-    item_id: str = ""
-    title: str = ""
-    price: str = ""
-    shop: str = ""
-    location: str = ""
-    sales: str = ""
+class AddressList:
+    count: int = 0
+    addresses: list = field(default_factory=list)  # list[Address]
     url: str = ""
-
+    platform: str = ""
     def to_dict(self) -> dict:
-        return {
-            "item_id": self.item_id, "title": self.title, "price": self.price,
-            "shop": self.shop, "location": self.location, "sales": self.sales, "url": self.url,
-        }
+        return {"count": self.count, "addresses": [a.to_dict() for a in self.addresses],
+                "url": self.url, "platform": self.platform}
+
+
+@dataclass
+class Shop:
+    shop_id: str = ""
+    name: str = ""
+    rating: str = ""
+    sales: str = ""          # 月售
+    delivery_fee: str = ""   # 配送费
+    min_order: str = ""      # 起送
+    eta: str = ""            # 预计送达
+    distance: str = ""
+    url: str = ""
+    def to_dict(self) -> dict:
+        return {"shop_id": self.shop_id, "name": self.name, "rating": self.rating,
+                "sales": self.sales, "delivery_fee": self.delivery_fee,
+                "min_order": self.min_order, "eta": self.eta, "distance": self.distance, "url": self.url}
 
 
 @dataclass
 class SearchResult:
     keyword: str = ""
     count: int = 0
-    items: list = field(default_factory=list)   # list[Item]
-    platform: str = ""
-
-    def to_dict(self) -> dict:
-        return {
-            "keyword": self.keyword, "count": self.count,
-            "items": [i.to_dict() for i in self.items], "platform": self.platform,
-        }
-
-
-@dataclass
-class ItemDetail:
-    item_id: str = ""
-    title: str = ""
-    price: str = ""
-    shop: str = ""
-    sales: str = ""
-    skus: list = field(default_factory=list)    # list[str] of sku option labels
-    images: list = field(default_factory=list)  # list[str] of image urls
+    shops: list = field(default_factory=list)  # list[Shop]
     url: str = ""
-
+    platform: str = ""
     def to_dict(self) -> dict:
-        return {
-            "item_id": self.item_id, "title": self.title, "price": self.price,
-            "shop": self.shop, "sales": self.sales, "skus": self.skus,
-            "images": self.images, "url": self.url,
-        }
+        return {"keyword": self.keyword, "count": self.count,
+                "shops": [s.to_dict() for s in self.shops], "url": self.url, "platform": self.platform}
 
 
 @dataclass
-class CartLine:
-    title: str = ""
+class MenuItem:
+    item_id: str = ""
+    name: str = ""
     price: str = ""
-    quantity: int = 0
-    sku: str = ""
-    checked: bool = False
-
+    desc: str = ""
+    sales: str = ""
     def to_dict(self) -> dict:
-        return {
-            "title": self.title, "price": self.price, "quantity": self.quantity,
-            "sku": self.sku, "checked": self.checked,
-        }
+        return {"item_id": self.item_id, "name": self.name, "price": self.price,
+                "desc": self.desc, "sales": self.sales}
+
+
+@dataclass
+class ShopMenu:
+    shop_id: str = ""
+    shop_name: str = ""
+    count: int = 0
+    items: list = field(default_factory=list)  # list[MenuItem]
+    url: str = ""
+    platform: str = ""
+    def to_dict(self) -> dict:
+        return {"shop_id": self.shop_id, "shop_name": self.shop_name, "count": self.count,
+                "items": [i.to_dict() for i in self.items], "url": self.url, "platform": self.platform}
 
 
 @dataclass
 class ActionResult:
-    """Generic result for a write action (add to cart / etc.)."""
     ok: bool = False
     message: str = ""
     url: str = ""
     screenshot_data_uri: str = ""
     platform: str = ""
-
     def to_dict(self) -> dict:
-        return {
-            "ok": self.ok, "message": self.message, "url": self.url,
-            "screenshot_data_uri": self.screenshot_data_uri, "platform": self.platform,
-        }
+        return {"ok": self.ok, "message": self.message, "url": self.url,
+                "screenshot_data_uri": self.screenshot_data_uri, "platform": self.platform}
+
+
+@dataclass
+class CartLine:
+    name: str = ""
+    price: str = ""
+    quantity: int = 0
+    def to_dict(self) -> dict:
+        return {"name": self.name, "price": self.price, "quantity": self.quantity}
 
 
 @dataclass
 class CartView:
     count: int = 0
-    lines: list = field(default_factory=list)   # list[CartLine]
+    lines: list = field(default_factory=list)  # list[CartLine]
+    total: str = ""
     url: str = ""
     platform: str = ""
-
     def to_dict(self) -> dict:
-        return {
-            "count": self.count, "lines": [l.to_dict() for l in self.lines],
-            "url": self.url, "platform": self.platform,
-        }
+        return {"count": self.count, "lines": [l.to_dict() for l in self.lines],
+                "total": self.total, "url": self.url, "platform": self.platform}
 
 
 @dataclass
 class OrderDraft:
-    """A confirm-order page reached but NOT paid. Human pays manually."""
-    stage: str = ""              # e.g. "confirm_order" / "blocked_amount_limit"
-    total_amount: str = ""       # parsed total, yuan
+    """确认订单/支付页,已到达但未付款。人工经 noVNC 付款。"""
+    stage: str = ""              # confirm_order / blocked_amount_limit
+    total_amount: str = ""
     within_limit: bool = True
-    lines: list = field(default_factory=list)    # list[CartLine]
+    address: str = ""
+    shop: str = ""
+    lines: list = field(default_factory=list)  # list[CartLine]
     url: str = ""
     screenshot_data_uri: str = ""
-    next_action: str = ""        # human instruction (e.g. noVNC 接管付款)
+    next_action: str = ""
     platform: str = ""
-
     def to_dict(self) -> dict:
-        return {
-            "stage": self.stage, "total_amount": self.total_amount,
-            "within_limit": self.within_limit,
-            "lines": [l.to_dict() for l in self.lines], "url": self.url,
-            "screenshot_data_uri": self.screenshot_data_uri,
-            "next_action": self.next_action, "platform": self.platform,
-        }
+        return {"stage": self.stage, "total_amount": self.total_amount,
+                "within_limit": self.within_limit, "address": self.address, "shop": self.shop,
+                "lines": [l.to_dict() for l in self.lines], "url": self.url,
+                "screenshot_data_uri": self.screenshot_data_uri,
+                "next_action": self.next_action, "platform": self.platform}
 
-
-# ---------------------------------------------------------------------------
-# Base backend
-# ---------------------------------------------------------------------------
 
 class BasePlatform(ABC):
     @property
@@ -165,43 +160,44 @@ class BasePlatform(ABC):
     def platform_name(self) -> str: ...
 
     @abstractmethod
-    def is_available(self) -> bool:
-        """Config is complete (playwright importable, profile dir writable).
+    def is_available(self) -> bool: ...
 
-        Does not launch the browser or hit the network.
-        """
-        ...
-
-    # ---- lifecycle (persistent browser context) ----
     @abstractmethod
     async def start(self) -> None: ...
 
     @abstractmethod
     async def close(self) -> None: ...
 
-    # ---- login ----
+    # ---- login (手机+短信+滑块,人工经 noVNC 完成) ----
     @abstractmethod
     async def check_login(self) -> LoginStatus: ...
 
     @abstractmethod
-    async def get_login_qrcode(self) -> LoginQrcode: ...
+    async def open_login(self) -> ActionResult: ...
+
+    # ---- address ----
+    @abstractmethod
+    async def list_addresses(self) -> AddressList: ...
+
+    @abstractmethod
+    async def set_address(self, keyword: str, index: int) -> ActionResult: ...
 
     # ---- browse ----
     @abstractmethod
     async def search(self, keyword: str, limit: int) -> SearchResult: ...
 
     @abstractmethod
-    async def get_item_detail(self, item: str) -> ItemDetail: ...
+    async def shop_menu(self, shop: str, limit: int) -> ShopMenu: ...
 
-    # ---- cart / order (order stops before payment) ----
+    # ---- cart / order (停在支付前) ----
     @abstractmethod
-    async def add_to_cart(self, item: str, quantity: int, sku: str) -> ActionResult: ...
-
-    @abstractmethod
-    async def view_cart(self) -> CartView: ...
+    async def add_to_cart(self, shop: str, item: str, quantity: int) -> ActionResult: ...
 
     @abstractmethod
-    async def create_order(self, item: Optional[str], quantity: int, sku: str) -> OrderDraft: ...
+    async def view_cart(self, shop: str) -> CartView: ...
+
+    @abstractmethod
+    async def create_order(self, shop: str) -> OrderDraft: ...
 
 
 class PlatformError(Exception):

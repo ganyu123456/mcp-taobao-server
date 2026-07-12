@@ -207,8 +207,8 @@ jobs:
           body: |
             ## MCP Taobao Server v${{ needs.version.outputs.version }}
 
-            为大模型提供淘宝购物能力的 MCP Server：搜索商品、加入购物车、生成待支付订单
-            （走到确认订单/支付页即停，**付款由人工经 noVNC 手动完成**）。
+            为大模型提供**淘宝闪购/饿了么外卖**能力的 MCP Server：搜附近店、看菜单、加入购物车、
+            生成待支付订单（走到确认订单/支付页即停，**登录与付款由人工经 noVNC 完成**）。
             服务器无物理屏幕时用 Xvfb 虚拟有头运行 Chromium。
 
             ### 文件说明
@@ -222,13 +222,8 @@ jobs:
             ### 离线部署
 
             ```bash
-            # 1. 加载对应架构的镜像
             docker load -i ${{ env.IMAGE_NAME }}_v${{ needs.version.outputs.version }}_linux-amd64.tar.gz
-
-            # 2. 按需编辑 .env（金额上限、站点、VNC 密码等）
             cd ${{ env.IMAGE_NAME }}_v${{ needs.version.outputs.version }}
-
-            # 3. 启动
             docker compose up -d
             ```
 
@@ -243,17 +238,18 @@ jobs:
 
             ### 使用流程
 
-            1. 调 `taobao_get_login_qrcode` → 手机淘宝扫码登录（登录态持久化）
-            2. `taobao_search` / `taobao_add_to_cart` 选货加购
-            3. `taobao_create_order` → 停在支付页，返回金额与截图
-            4. 浏览器打开 `http://<your-server>:6080/vnc.html`（noVNC）手动点击付款
+            1. `shangou_open_login` → 浏览器打开 `http://<your-server>:6080/vnc.html`（noVNC），手机+短信+滑块登录
+            2. `shangou_list_addresses` / `shangou_set_address` 选收货地址
+            3. `shangou_search` 搜店 → `shangou_shop_menu` → `shangou_add_to_cart` 加购
+            4. `shangou_create_order` → 停在支付页，返回金额与截图
+            5. 回到 noVNC 手动确认并付款
 
             ### MCP 客户端配置
 
             ```json
             {
               "mcpServers": {
-                "taobao": {
+                "shangou": {
                   "url": "http://<your-server>:8094/sse"
                 }
               }

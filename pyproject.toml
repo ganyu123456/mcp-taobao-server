@@ -1,11 +1,11 @@
 [project]
 name = "mcp-taobao-server"
-version = "1.0.0"
-description = "MCP Taobao Server - 淘宝商品搜索/加购/生成待支付订单(浏览器自动化,人工付款)"
+version = "2.0.0"
+description = "MCP Taobao Server - 淘宝闪购/饿了么外卖(搜店/加购/生成待支付订单,浏览器自动化,人工付款)"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "ganyu" }]
-keywords = ["mcp", "taobao", "shopping", "server"]
+keywords = ["mcp", "taobao", "shangou", "eleme", "waimai", "server"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
