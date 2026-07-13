@@ -3,18 +3,38 @@
 set -e
 
 SCREEN="${MCP_TAOBAO_SCREEN:-1280x1024x24}"
-DISP="${DISPLAY:-:99}"
 NOVNC_PORT="${MCP_TAOBAO_NOVNC_PORT:-6080}"
 
 mkdir -p "${MCP_TAOBAO_USER_DATA_DIR:-/data/profile}"
 
-# 1) 虚拟显示
-Xvfb "$DISP" -screen 0 "$SCREEN" -ac +extension GLX +render -noreset >/tmp/xvfb.log 2>&1 &
-# 等待 Xvfb 就绪(检测 X11 socket,不依赖 x11-utils)
-for i in $(seq 1 40); do
-    [ -S "/tmp/.X11-unix/X${DISP#:}" ] && break
-    sleep 0.25
-done
+# 0) 清理残留的 Chrome profile 锁(避免 Playwright 报 "Opening in existing browser session")
+rm -f "${MCP_TAOBAO_USER_DATA_DIR:-/data/profile}"/Singleton{Lock,Cookie,Socket} 2>/dev/null || true
+
+# 1) 虚拟显示 — 尝试启动 Xvfb,优先用 DISPLAY 环境变量,冲突时自动选空闲编号
+_xvfb_start() {
+    local dpy_num="${DISPLAY:-:99}"
+    dpy_num="${dpy_num#:}"
+    # 先清理可能的残留锁文件/套接字
+    for _try in $(seq 0 5); do
+        local _dn=$((dpy_num + _try))
+        rm -f "/tmp/.X${_dn}-lock" "/tmp/.X11-unix/X${_dn}" 2>/dev/null || true
+        Xvfb ":${_dn}" -screen 0 "$SCREEN" -ac +extension GLX +render -noreset >/tmp/xvfb.log 2>&1 &
+        # 等待 Xvfb 就绪
+        for _i in $(seq 1 20); do
+            [ -S "/tmp/.X11-unix/X${_dn}" ] && break
+            sleep 0.25
+        done
+        if [ -S "/tmp/.X11-unix/X${_dn}" ]; then
+            DISP=":${_dn}"
+            return 0
+        fi
+        pkill -9 -f "Xvfb :${_dn}" 2>/dev/null || true
+    done
+    return 1
+}
+_xvfb_start || { echo "Xvfb 启动失败"; cat /tmp/xvfb.log; exit 1; }
+
+echo "Xvfb started on ${DISP}"
 
 # 2) VNC 服务(连接到 Xvfb 的虚拟屏)
 if [ -n "$MCP_TAOBAO_VNC_PASSWORD" ]; then

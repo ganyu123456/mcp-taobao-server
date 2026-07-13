@@ -44,7 +44,17 @@ _URL_USHOPSEARCH = "newretail/p/ushopsearch"
 _URL_BUY = "newretail/tr/buy"
 
 _BLOCK_HINTS = ("滑块", "拖动", "验证码", "安全验证", "punish", "//sec.", "captcha")
-_STEALTH_JS = "Object.defineProperty(navigator,'webdriver',{get:()=>undefined});"
+_STEALTH_JS = """\
+Object.defineProperty(navigator,'webdriver',{get:()=>undefined});
+Object.defineProperty(navigator,'plugins',{get:()=>[1,2,3,4,5]});
+Object.defineProperty(navigator,'languages',{get:()=>['zh-CN','zh','en']});
+Object.defineProperty(navigator,'platform',{get:()=>'iPhone'});
+Object.defineProperty(navigator,'hardwareConcurrency',{get:()=>4});
+Object.defineProperty(navigator,'deviceMemory',{get:()=>8});
+if(!window.chrome){window.chrome={runtime:{}};}
+if(!window.chrome.runtime){window.chrome.runtime={};}
+if(!navigator.connection){Object.defineProperty(navigator,'connection',{get:()=>({effectiveType:'4g',rtt:50,downlink:10})});}
+"""
 _PHONE_RE = re.compile(r"1[3-9]\d{9}")
 _STORE_ID_RE = re.compile(r"store_id=(\d+)")
 _CART_TOTAL_RE = re.compile(r"购物车总计金额([\d.]+)元")
@@ -185,6 +195,7 @@ class ElemePlatform(BasePlatform):
                 self.platform_name,
                 "未登录饿了么。请先调 shangou_open_login,并在 noVNC(:6080) 里用手机号+短信验证码+滑块完成登录。",
             )
+        return page
 
     async def _click_text(self, page, texts, timeout_ms: int = 5000) -> bool:
         for t in texts:
@@ -269,9 +280,33 @@ class ElemePlatform(BasePlatform):
         return AddressList(count=len(addrs), addresses=addrs, url=page.url, platform=self.platform_name)
 
     async def set_address(self, keyword: str, index: int) -> ActionResult:
-        """选定收货地址。地址页是 tiga 影子DOM,选择需点行体(避开右侧编辑/删除),用坐标 tap。"""
-        page = await self._goto(ADDRESS_URL, wait=4500)
-        await self._require_login(page)
+        """选定收货地址。先访问 msite 建立浏览器历史,再拦截 history.back 防止 navigateBack 跳 about:blank。"""
+        page = await self._require_login(await self._ensure())
+
+        # 先访问 msite 建立浏览器历史,使 address 页的 navigateBack 有历史可回
+        await page.goto(MSITE, wait_until="domcontentloaded")
+        await page.wait_for_timeout(3000)
+
+        # 注入导航拦截器 — address 页的 my.navigateBack 在独立浏览器里会走 history.back,
+        # 若 history 为空则跳 about:blank;拦截后我们手动导航回 msite
+        await page.evaluate("""
+            (() => {
+                if (!History.prototype._origBack) {
+                    History.prototype._origBack = History.prototype.back;
+                    History.prototype.back = function() {
+                        window.__nav_intercepted = 'https://h5.ele.me/msite/';
+                    };
+                    History.prototype._origGo = History.prototype.go;
+                    History.prototype.go = function(n) {
+                        if (n < 0) window.__nav_intercepted = 'https://h5.ele.me/msite/';
+                        else History.prototype._origGo.call(this, n);
+                    };
+                }
+            })();
+        """)
+
+        await page.goto(ADDRESS_URL, wait_until="domcontentloaded")
+        await page.wait_for_timeout(4500)
         leafs = await self._pierce_texts(page)
         # 地址行:x∈[35,75] 且同一行右侧有『编辑』的文本,即一条保存地址
         edit_ys = [y for (y, x, s) in leafs if s.strip() == "编辑"]
@@ -301,18 +336,33 @@ class ElemePlatform(BasePlatform):
             return ActionResult(ok=False, message="未找到可选地址(页面为空/未登录/结构变化),请用 noVNC 手动选一次。",
                                 url=page.url, screenshot_data_uri=shot, platform=self.platform_name)
 
-        # 点该行左中部(x=150 远离右侧 编辑/删除 x>320)选定;通常跳回门店首页
+        # 点该行左中部(x=150 远离右侧 编辑/删除 x>320)选定
         await page.touchscreen.tap(150, float(target_y))
-        for _ in range(12):
-            await page.wait_for_timeout(600)
-            if "address" not in (page.url or ""):
-                break
-        await page.wait_for_timeout(2500)
-        selected = "address" not in (page.url or "")
+        await page.wait_for_timeout(3500)  # 等待地址数据保存到 localStorage
+
+        # 手动导航回 msite(导航已被拦截,这里用 goto 确保回到 msite)
+        await page.goto(MSITE, wait_until="domcontentloaded")
+        await page.wait_for_timeout(3000)
+
+        # 恢复原生 history 方法
+        await page.evaluate("""
+            (() => {
+                if (History.prototype._origBack) {
+                    History.prototype.back = History.prototype._origBack;
+                    delete History.prototype._origBack;
+                }
+                if (History.prototype._origGo) {
+                    History.prototype.go = History.prototype._origGo;
+                    delete History.prototype._origGo;
+                }
+            })();
+        """)
+
         shot = await self._shot(page)
+        selected = "address" not in (page.url or "") and "minisite" in (page.url or "")
         if not selected:
             return ActionResult(ok=False,
-                                message=f"已尝试选择『{target_name}』但页面未跳转,可能需人工在 noVNC 里点一次。",
+                                message=f"已尝试选择『{target_name}』但未回到首页,可能需人工在 noVNC 里点一次。",
                                 url=page.url, screenshot_data_uri=shot, platform=self.platform_name)
         return ActionResult(ok=True, message=f"已选择收货地址『{target_name}』,进入附近门店。",
                             url=page.url, screenshot_data_uri=shot, platform=self.platform_name)
@@ -343,7 +393,7 @@ class ElemePlatform(BasePlatform):
             name = ""
             row_y = None
             for (ty, _tx, s) in band:
-                if "准时达" in s or "自配送" in s:
+                if "准时达" in s or "自配送" in s or "全城达" in s:
                     row_y = ty
                     break
             if row_y is not None:
@@ -355,6 +405,21 @@ class ElemePlatform(BasePlatform):
                 )
                 if cands:
                     name = cands[0][1]
+            # fallback: 配送行未识别到则按卡片结构推断店名
+            # 店名位于卡片左上区域,排除品类标签、商品名、营销文案
+            _NOT_NAME = re.compile(r"已售\d+|\d+\.\d+分|^\d+$|起$|免$|新品|爆款|特价|满减|领券|进店|收藏|新店|好评|门店|月销")
+            if not name:
+                # 卡片上半区域取最靠左上角的文本作为店名候选
+                top_left = sorted(
+                    (ty, tx, s) for (ty, tx, s) in band
+                    if ty - band_lo <= 55 and 45 <= tx <= 280
+                    and len(s) >= 2 and not re.fullmatch(r"[\d.]+", s)
+                    and s not in _STOP and "分" not in s and "km" not in s and "分钟" not in s
+                    and "起送" not in s and "配送" not in s and "准时达" not in s
+                    and not _NOT_NAME.search(s)
+                )
+                if top_left:
+                    name = top_left[0][2]
             shops.append(Shop(
                 shop_id=str(i),
                 name=name,
