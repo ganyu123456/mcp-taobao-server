@@ -178,6 +178,22 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
+            name="shangou_submit_order",
+            description=(
+                "【会真实提交订单】在确认订单页点『提交订单』,进入支付宝收银台即【停止,不输密码、不代付】,"
+                "返回收银台支付链接与截图。**仅在用户明确同意下单后调用**(通常先 shangou_create_order 核对金额)。"
+                "参数 shop=店铺序号。金额超上限(MCP_TAOBAO_MAX_ORDER_AMOUNT)会被拒绝。"
+                "收银台链接与登录态/时效绑定,请在已登录浏览器(服务器为 noVNC:6080)打开付款。"
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "shop": {"type": "string", "description": "店铺序号(shangou_search 返回的 shop_id)"},
+                },
+                "required": ["shop"],
+            },
+        ),
+        Tool(
             name="shangou_get_server_status",
             description="查询服务配置与可用性(是否装好 playwright、profile 目录、有头/无头、默认定位、金额上限等)。无需登录即可调用。",
             inputSchema={"type": "object", "properties": {}},
@@ -248,6 +264,12 @@ async def _handle_tool(name: str, args: dict[str, Any]) -> str:
         if not shop:
             raise PlatformError(DEFAULT_PLATFORM, "shop 不能为空。")
         return json.dumps((await p.create_order(shop)).to_dict(), ensure_ascii=False)
+    if name == "shangou_submit_order":
+        p = _get_platform(DEFAULT_PLATFORM)
+        shop = str(args.get("shop", "")).strip()
+        if not shop:
+            raise PlatformError(DEFAULT_PLATFORM, "shop 不能为空。")
+        return json.dumps((await p.submit_order(shop)).to_dict(), ensure_ascii=False)
     if name == "shangou_get_server_status":
         return _server_status()
     return json.dumps({"error": f"Unknown tool: {name}"}, ensure_ascii=False)

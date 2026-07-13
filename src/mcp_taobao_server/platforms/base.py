@@ -199,6 +199,9 @@ class BasePlatform(ABC):
     @abstractmethod
     async def create_order(self, shop: str) -> OrderDraft: ...
 
+    @abstractmethod
+    async def submit_order(self, shop: str) -> OrderDraft: ...
+
 
 class PlatformError(Exception):
     def __init__(self, platform: str, message: str):

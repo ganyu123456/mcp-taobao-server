@@ -24,7 +24,11 @@ RUN chmod +x /app/entrypoint.sh \
     && playwright install-deps chromium \
     && playwright install chromium \
     && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* /root/.cache/pip /root/.cache/ms-playwright/ffmpeg-*
+    && rm -rf /var/lib/apt/lists/* /root/.cache/pip \
+              /root/.cache/ms-playwright/ffmpeg-* \
+              /usr/share/doc/* /usr/share/man/* /usr/share/info/* /usr/share/locale/*/LC_MESSAGES \
+    && find /root/.local -depth -type d -name __pycache__ -exec rm -rf {} + \
+    && find /root/.local -name '*.pyc' -delete
 
 ENV MCP_TRANSPORT=sse \
     MCP_HOST=0.0.0.0 \
