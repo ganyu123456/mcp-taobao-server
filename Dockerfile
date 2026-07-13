@@ -1,7 +1,7 @@
 FROM python:3.11-slim AS builder
 WORKDIR /app
 COPY requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
+RUN pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com --user -r requirements.txt
 
 FROM python:3.11-slim
 WORKDIR /app
@@ -17,7 +17,7 @@ COPY entrypoint.sh /app/entrypoint.sh
 # 单层安装：本包 + Xvfb/VNC 组件 + 极小中文字体 + Chromium 依赖与浏览器，
 # 末尾统一清理 apt/pip 缓存与 Playwright 附带的 ffmpeg，尽量缩小镜像。
 RUN chmod +x /app/entrypoint.sh \
-    && pip install --no-cache-dir -e ".[sse]" \
+    && pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com -e ".[sse]" \
     && echo "deb http://mirrors.aliyun.com/debian/ trixie main contrib non-free non-free-firmware" > /etc/apt/sources.list \
     && echo "deb http://mirrors.aliyun.com/debian/ trixie-updates main contrib non-free non-free-firmware" >> /etc/apt/sources.list \
     && echo "deb http://mirrors.aliyun.com/debian-security trixie-security main contrib non-free non-free-firmware" >> /etc/apt/sources.list \
@@ -28,8 +28,12 @@ RUN chmod +x /app/entrypoint.sh \
     && playwright install chromium \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /root/.cache/pip \
+              /root/.cache/ms-playwright/chromium_headless_shell-* \
               /root/.cache/ms-playwright/ffmpeg-* \
               /usr/share/doc/* /usr/share/man/* /usr/share/info/* /usr/share/locale/*/LC_MESSAGES \
+              /usr/share/fonts/truetype/freefont /usr/share/fonts/truetype/unifont \
+              /usr/share/fonts/opentype/ipafont-gothic /usr/share/fonts/truetype/wqy-zenhei \
+              /usr/share/fonts/opentype/noto \
     && find /root/.local -depth -type d -name __pycache__ -exec rm -rf {} + \
     && find /root/.local -name '*.pyc' -delete
 
