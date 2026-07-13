@@ -18,6 +18,9 @@ COPY entrypoint.sh /app/entrypoint.sh
 # 末尾统一清理 apt/pip 缓存与 Playwright 附带的 ffmpeg，尽量缩小镜像。
 RUN chmod +x /app/entrypoint.sh \
     && pip install --no-cache-dir -e ".[sse]" \
+    && echo "deb http://mirrors.aliyun.com/debian/ trixie main contrib non-free non-free-firmware" > /etc/apt/sources.list \
+    && echo "deb http://mirrors.aliyun.com/debian/ trixie-updates main contrib non-free non-free-firmware" >> /etc/apt/sources.list \
+    && echo "deb http://mirrors.aliyun.com/debian-security trixie-security main contrib non-free non-free-firmware" >> /etc/apt/sources.list \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
          xvfb x11vnc novnc websockify fonts-wqy-microhei ca-certificates \
